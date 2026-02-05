@@ -192,6 +192,7 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
     // Processa chunks de áudio recebidos
     useEffect(() => {
         if (audioChunk) {
+            console.log('[Audio] Recebido chunk:', audioChunk.byteLength, 'bytes');
             queueAudio(audioChunk);
         }
     }, [audioChunk, queueAudio]);

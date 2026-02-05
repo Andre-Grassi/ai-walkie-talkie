@@ -1,49 +1,48 @@
-/**
- * Hook para reprodução de áudio PCM 24kHz da IA
- */
-
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AUDIO_OUTPUT_SAMPLE_RATE } from '../utils/constants';
-import { pcmBufferToFloat32, createAudioBuffer, calculateAudioLevel } from '../utils/audio';
+import { calculateAudioLevel } from '../utils/audio';
 
-interface UseAudioPlaybackReturn {
-    isPlaying: boolean;
-    queueAudio: (pcmData: ArrayBuffer) => void;
-    stop: () => void;
-    audioLevel: number;
+/**
+ * Converte buffer PCM 16-bit para Float32Array normalizado.
+ */
+function pcmBufferToFloat32(pcmData: ArrayBuffer): Float32Array {
+    const int16 = new Int16Array(pcmData);
+    const float32 = new Float32Array(int16.length);
+
+    for (let i = 0; i < int16.length; i++) {
+        float32[i] = int16[i] / 32768.0;
+    }
+
+    return float32;
 }
 
-export function useAudioPlayback(): UseAudioPlaybackReturn {
+/**
+ * Hook para reprodução de áudio PCM recebido do servidor.
+ * Usa scheduled playback para eliminar gaps entre chunks.
+ */
+export function useAudioPlayback() {
     const [isPlaying, setIsPlaying] = useState(false);
     const [audioLevel, setAudioLevel] = useState(0);
 
     const audioContextRef = useRef<AudioContext | null>(null);
-    const queueRef = useRef<AudioBuffer[]>([]);
-    const currentSourceRef = useRef<AudioBufferSourceNode | null>(null);
-    const isPlayingRef = useRef(false);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const animationFrameRef = useRef<number | null>(null);
+    const isPlayingRef = useRef(false);
+
+    // Para scheduled playback - rastreia quando o próximo chunk deve começar
+    const nextStartTimeRef = useRef(0);
+    const currentSourcesRef = useRef<AudioBufferSourceNode[]>([]);
 
     /**
      * Obtém ou cria o AudioContext
      */
     const getAudioContext = useCallback(() => {
         if (!audioContextRef.current) {
-            audioContextRef.current = new AudioContext({
-                sampleRate: AUDIO_OUTPUT_SAMPLE_RATE,
-            });
-
-            // Cria analyser para visualização
+            audioContextRef.current = new AudioContext({ sampleRate: AUDIO_OUTPUT_SAMPLE_RATE });
             analyserRef.current = audioContextRef.current.createAnalyser();
             analyserRef.current.fftSize = 256;
             analyserRef.current.connect(audioContextRef.current.destination);
         }
-
-        // Resume se estiver suspenso (política de autoplay)
-        if (audioContextRef.current.state === 'suspended') {
-            audioContextRef.current.resume();
-        }
-
         return audioContextRef.current;
     }, []);
 
@@ -68,44 +67,72 @@ export function useAudioPlayback(): UseAudioPlaybackReturn {
     }, []);
 
     /**
-     * Reproduz o próximo buffer da fila
+     * Adiciona áudio PCM à fila de reprodução usando scheduled playback.
+     * Os chunks são agendados para tocar em sequência sem gaps.
      */
-    const playNext = useCallback(() => {
+    const queueAudio = useCallback((pcmData: ArrayBuffer) => {
         const audioContext = getAudioContext();
 
-        if (queueRef.current.length === 0) {
-            isPlayingRef.current = false;
-            setIsPlaying(false);
-            setAudioLevel(0);
-
-            if (animationFrameRef.current) {
-                cancelAnimationFrame(animationFrameRef.current);
-                animationFrameRef.current = null;
-            }
-            return;
+        // Resume se suspenso (política de autoplay)
+        if (audioContext.state === 'suspended') {
+            audioContext.resume();
         }
 
-        const buffer = queueRef.current.shift()!;
+        // Converte PCM para Float32
+        const float32Data = pcmBufferToFloat32(pcmData);
 
+        // Cria AudioBuffer
+        const audioBuffer = audioContext.createBuffer(
+            1, // mono
+            float32Data.length,
+            AUDIO_OUTPUT_SAMPLE_RATE
+        );
+        audioBuffer.copyToChannel(float32Data, 0);
+
+        // Cria source
         const source = audioContext.createBufferSource();
-        source.buffer = buffer;
+        source.buffer = audioBuffer;
 
-        // Conecta ao analyser (que já está conectado ao destination)
+        // Conecta ao analyser
         if (analyserRef.current) {
             source.connect(analyserRef.current);
         } else {
             source.connect(audioContext.destination);
         }
 
-        currentSourceRef.current = source;
+        // Calcula quando este chunk deve começar
+        const now = audioContext.currentTime;
+        const startTime = Math.max(now, nextStartTimeRef.current);
 
+        // Agenda o próximo chunk para começar exatamente quando este terminar
+        nextStartTimeRef.current = startTime + audioBuffer.duration;
+
+        // Agenda e inicia
+        source.start(startTime);
+        currentSourcesRef.current.push(source);
+
+        // Limpa sources terminados
         source.onended = () => {
-            currentSourceRef.current = null;
-            playNext();
+            const index = currentSourcesRef.current.indexOf(source);
+            if (index > -1) {
+                currentSourcesRef.current.splice(index, 1);
+            }
+
+            // Se não há mais sources ativos, para a animação
+            if (currentSourcesRef.current.length === 0) {
+                isPlayingRef.current = false;
+                setIsPlaying(false);
+                setAudioLevel(0);
+                nextStartTimeRef.current = 0;
+
+                if (animationFrameRef.current) {
+                    cancelAnimationFrame(animationFrameRef.current);
+                    animationFrameRef.current = null;
+                }
+            }
         };
 
-        source.start();
-
+        // Inicia a animação se não estiver rodando
         if (!isPlayingRef.current) {
             isPlayingRef.current = true;
             setIsPlaying(true);
@@ -114,67 +141,46 @@ export function useAudioPlayback(): UseAudioPlaybackReturn {
     }, [getAudioContext, updateAudioLevel]);
 
     /**
-     * Adiciona áudio PCM à fila de reprodução
-     */
-    const queueAudio = useCallback((pcmData: ArrayBuffer) => {
-        const audioContext = getAudioContext();
-
-        // Converte PCM para Float32
-        const float32Data = pcmBufferToFloat32(pcmData);
-
-        // Cria AudioBuffer
-        const audioBuffer = createAudioBuffer(audioContext, float32Data, AUDIO_OUTPUT_SAMPLE_RATE);
-
-        // Adiciona à fila
-        queueRef.current.push(audioBuffer);
-
-        // Inicia reprodução se não estiver tocando
-        if (!isPlayingRef.current) {
-            playNext();
-        }
-    }, [getAudioContext, playNext]);
-
-    /**
-     * Para a reprodução e limpa a fila
+     * Para toda reprodução
      */
     const stop = useCallback(() => {
-        // Para o source atual
-        if (currentSourceRef.current) {
-            currentSourceRef.current.stop();
-            currentSourceRef.current.disconnect();
-            currentSourceRef.current = null;
+        // Para todos os sources ativos
+        for (const source of currentSourcesRef.current) {
+            try {
+                source.stop();
+            } catch {
+                // Ignora erros se já parou
+            }
         }
-
-        // Limpa a fila
-        queueRef.current = [];
-
-        // Para a animação
-        if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-            animationFrameRef.current = null;
-        }
+        currentSourcesRef.current = [];
+        nextStartTimeRef.current = 0;
 
         isPlayingRef.current = false;
         setIsPlaying(false);
         setAudioLevel(0);
+
+        if (animationFrameRef.current) {
+            cancelAnimationFrame(animationFrameRef.current);
+            animationFrameRef.current = null;
+        }
     }, []);
 
-    // Cleanup ao desmontar
+    /**
+     * Cleanup ao desmontar
+     */
     useEffect(() => {
         return () => {
             stop();
-
             if (audioContextRef.current) {
                 audioContextRef.current.close();
-                audioContextRef.current = null;
             }
         };
     }, [stop]);
 
     return {
         isPlaying,
+        audioLevel,
         queueAudio,
         stop,
-        audioLevel,
     };
 }

@@ -30,6 +30,7 @@ export function useWebSocket(): UseWebSocketReturn {
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectAttemptRef = useRef(0);
     const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const isConnectingRef = useRef(false);
 
     /**
      * Calcula o delay de reconexão com backoff exponencial
@@ -43,11 +44,23 @@ export function useWebSocket(): UseWebSocketReturn {
      * Conecta ao WebSocket
      */
     const connect = useCallback(() => {
+        // Evita conexões simultâneas
+        if (isConnectingRef.current) {
+            console.log('[WebSocket] Já conectando, ignorando');
+            return;
+        }
+
         // Limpa conexão anterior
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            console.log('[WebSocket] Já conectado, ignorando');
+            return;
+        }
+
         if (wsRef.current) {
             wsRef.current.close();
         }
 
+        isConnectingRef.current = true;
         setStatus('connecting');
         setError(null);
 
@@ -59,6 +72,7 @@ export function useWebSocket(): UseWebSocketReturn {
 
             ws.onopen = () => {
                 console.log('[WebSocket] Conectado');
+                isConnectingRef.current = false;
                 setStatus('connected');
                 reconnectAttemptRef.current = 0;
             };
@@ -86,11 +100,13 @@ export function useWebSocket(): UseWebSocketReturn {
 
             ws.onerror = (event) => {
                 console.error('[WebSocket] Erro:', event);
+                isConnectingRef.current = false;
                 setError('Erro de conexão');
             };
 
             ws.onclose = (event) => {
                 console.log('[WebSocket] Desconectado:', event.code, event.reason);
+                isConnectingRef.current = false;
                 setStatus('disconnected');
                 wsRef.current = null;
 
@@ -145,6 +161,12 @@ export function useWebSocket(): UseWebSocketReturn {
 
     // Conecta automaticamente ao montar
     useEffect(() => {
+        // Guard para evitar dupla conexão no React Strict Mode
+        if (wsRef.current && wsRef.current.readyState !== WebSocket.CLOSED) {
+            console.log('[WebSocket] Conexão já existe, ignorando');
+            return;
+        }
+
         connect();
 
         return () => {
@@ -153,6 +175,7 @@ export function useWebSocket(): UseWebSocketReturn {
             }
             if (wsRef.current) {
                 wsRef.current.close();
+                wsRef.current = null;
             }
         };
     }, [connect]);
