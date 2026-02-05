@@ -70,6 +70,7 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
     const {
         isPlaying,
         queueAudio,
+        flushAllBuffered,
         stop: stopPlayback,
         audioLevel: audioLevelOut,
     } = useAudioPlayback();
@@ -179,6 +180,8 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
                 break;
 
             case 'turn_complete':
+                // Reproduz áudio acumulado (modo bufferAllAudio)
+                flushAllBuffered();
                 setState('idle');
                 break;
 

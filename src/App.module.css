@@ -20,6 +20,36 @@
     z-index: 10;
 }
 
+/* Header buttons container */
+.headerButtons {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* Experimental button */
+.experimentalButton {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 200, 0, 0.15);
+    color: rgba(255, 200, 0, 0.6);
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+}
+
+.experimentalButton:hover {
+    background: rgba(255, 200, 0, 0.1);
+    color: #ffc800;
+    border-color: rgba(255, 200, 0, 0.4);
+}
+
 /* Context button */
 .contextButton {
     display: flex;
