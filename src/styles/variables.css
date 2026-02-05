@@ -1,0 +1,73 @@
+/* === DESIGN SYSTEM: Military Tactical Radio === */
+
+:root {
+  /* === MILITARY COLOR PALETTE === */
+  
+  /* Background - Dark Military Green/Black */
+  --color-bg-primary: #0d1210;
+  --color-bg-secondary: #1a2420;
+  --color-bg-elevated: #243028;
+  --color-bg-display: #0a0f0c;
+  
+  /* Accent - Military Olive/Tactical Green */
+  --color-accent: #7cb342;
+  --color-accent-hover: #8bc34a;
+  --color-accent-active: #689f38;
+  --color-accent-glow: rgba(124, 179, 66, 0.4);
+  
+  /* Status Colors - Military Style */
+  --color-success: #7cb342;
+  --color-warning: #ffa726;
+  --color-error: #ef5350;
+  --color-transmit: #ff7043;
+  --color-receive: #42a5f5;
+  
+  /* Text - High Contrast for Readability */
+  --color-text-primary: #e8f5e9;
+  --color-text-secondary: #a5d6a7;
+  --color-text-muted: #4a635a;
+  --color-text-display: #7cb342;
+  
+  /* === TYPOGRAPHY === */
+  --font-family-mono: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  --font-family-display: 'Orbitron', 'Rajdhani', sans-serif;
+  --font-family-body: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-md: 1rem;
+  --font-size-lg: 1.25rem;
+  --font-size-xl: 1.5rem;
+  --font-size-2xl: 2rem;
+  --font-size-status: 0.65rem;
+  
+  /* === SPACING === */
+  --space-xs: 0.25rem;
+  --space-sm: 0.5rem;
+  --space-md: 1rem;
+  --space-lg: 1.5rem;
+  --space-xl: 2rem;
+  --space-2xl: 3rem;
+  
+  /* === BORDERS & EFFECTS === */
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-button: 50%;
+  
+  /* Shadows - Efeito de equipamento sólido */
+  --shadow-inset: inset 0 2px 4px rgba(0, 0, 0, 0.5);
+  --shadow-button: 0 4px 0 #1a2420, 0 6px 12px rgba(0, 0, 0, 0.4);
+  --shadow-button-pressed: 0 1px 0 #1a2420, 0 2px 4px rgba(0, 0, 0, 0.3);
+  --shadow-glow: 0 0 20px var(--color-accent-glow);
+  
+  /* === TRANSITIONS === */
+  --transition-fast: 100ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 350ms ease;
+  
+  /* === LAYOUT === */
+  --ptt-button-size: 140px;
+  --header-height: 48px;
+  --footer-height: 32px;
+}

@@ -1,0 +1,94 @@
+/* === SUBTITLE DISPLAY === */
+
+.container {
+    position: relative;
+    flex: 1;
+    min-height: 100px;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: var(--space-md);
+    background: var(--color-bg-display);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+
+    /* Estilo de display LCD */
+    box-shadow: var(--shadow-inset);
+}
+
+.container.speaking {
+    border-color: var(--color-receive);
+    box-shadow:
+        var(--shadow-inset),
+        0 0 10px rgba(66, 165, 245, 0.2);
+}
+
+.content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-sm);
+}
+
+/* Fade gradient no topo para indicar scroll */
+.fadeTop {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    background: linear-gradient(to bottom,
+            var(--color-bg-display),
+            transparent);
+    pointer-events: none;
+}
+
+/* Texto das legendas */
+.subtitle {
+    font-family: var(--font-family-body);
+    font-size: var(--font-size-sm);
+    line-height: 1.6;
+    color: var(--color-text-secondary);
+    opacity: 0.7;
+    transition: opacity var(--transition-normal);
+}
+
+.subtitle.latest {
+    color: var(--color-text-display);
+    opacity: 1;
+    animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Estado vazio */
+.empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    min-height: 80px;
+    gap: var(--space-sm);
+}
+
+.emptyIcon {
+    font-size: 24px;
+    opacity: 0.5;
+}
+
+.emptyText {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+}

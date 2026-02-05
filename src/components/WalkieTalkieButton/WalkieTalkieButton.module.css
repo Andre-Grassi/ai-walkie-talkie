@@ -1,0 +1,180 @@
+/* === WALKIE-TALKIE BUTTON === */
+
+.container {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--ptt-button-size);
+    height: var(--ptt-button-size);
+}
+
+/* Anel de glow que pulsa com o áudio */
+.glowRing {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: transparent;
+    border: 2px solid var(--color-accent);
+    opacity: 0;
+    transition:
+        transform var(--transition-fast),
+        opacity var(--transition-fast);
+    pointer-events: none;
+}
+
+.glowActive {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.3;
+    }
+
+    50% {
+        transform: scale(1.15);
+        opacity: 0.6;
+    }
+}
+
+/* Botão principal */
+.button {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    background: linear-gradient(145deg, var(--color-bg-elevated), var(--color-bg-secondary));
+    border: 3px solid var(--color-bg-elevated);
+    box-shadow: var(--shadow-button);
+    cursor: pointer;
+    transition:
+        transform var(--transition-fast),
+        box-shadow var(--transition-fast),
+        background var(--transition-normal);
+
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-sm);
+
+    /* Efeito de borda metálica */
+    outline: 2px solid rgba(255, 255, 255, 0.05);
+    outline-offset: -4px;
+}
+
+.button:active:not(.disabled) {
+    transform: translateY(3px);
+    box-shadow: var(--shadow-button-pressed);
+}
+
+/* Estados */
+.idle {
+    color: var(--color-text-secondary);
+}
+
+.idle:hover:not(.disabled) {
+    background: linear-gradient(145deg, var(--color-bg-elevated), #2a3830);
+    color: var(--color-accent);
+}
+
+.recording {
+    background: linear-gradient(145deg, var(--color-transmit), #cc5a36);
+    color: var(--color-text-primary);
+    border-color: var(--color-transmit);
+    box-shadow:
+        var(--shadow-button-pressed),
+        0 0 30px rgba(255, 112, 67, 0.4);
+    transform: translateY(3px);
+}
+
+.processing {
+    background: linear-gradient(145deg, var(--color-warning), #cc8520);
+    color: var(--color-bg-primary);
+    border-color: var(--color-warning);
+    animation: processingPulse 1s ease-in-out infinite;
+}
+
+@keyframes processingPulse {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.7;
+    }
+}
+
+.playing {
+    background: linear-gradient(145deg, var(--color-receive), #3484c4);
+    color: var(--color-text-primary);
+    border-color: var(--color-receive);
+    box-shadow:
+        var(--shadow-button),
+        0 0 30px rgba(66, 165, 245, 0.4);
+}
+
+.error {
+    background: linear-gradient(145deg, var(--color-error), #c43c36);
+    color: var(--color-text-primary);
+    border-color: var(--color-error);
+    animation: shake 0.5s ease-in-out;
+}
+
+@keyframes shake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    10%,
+    30%,
+    50%,
+    70%,
+    90% {
+        transform: translateX(-4px);
+    }
+
+    20%,
+    40%,
+    60%,
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Ícone */
+.iconContainer {
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.icon {
+    width: 100%;
+    height: 100%;
+}
+
+/* Label */
+.label {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-status);
+    text-transform: uppercase;
+    letter-spacing: 0.15em;
+    font-weight: 500;
+}

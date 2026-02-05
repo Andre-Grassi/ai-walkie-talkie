@@ -1,0 +1,113 @@
+/* === STATUS INDICATOR === */
+
+.container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-xs);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.statusRow {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+}
+
+/* LED indicator */
+.led {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    transition:
+        background var(--transition-normal),
+        box-shadow var(--transition-normal);
+}
+
+.ledSuccess {
+    background: var(--color-success);
+    box-shadow: 0 0 8px var(--color-success);
+}
+
+.ledWarning {
+    background: var(--color-warning);
+    box-shadow: 0 0 8px var(--color-warning);
+    animation: blink 1s ease-in-out infinite;
+}
+
+.ledError {
+    background: var(--color-error);
+    box-shadow: 0 0 8px var(--color-error);
+}
+
+.ledTransmit {
+    background: var(--color-transmit);
+    box-shadow: 0 0 12px var(--color-transmit);
+    animation: transmitPulse 0.3s ease-in-out infinite;
+}
+
+.ledReceive {
+    background: var(--color-receive);
+    box-shadow: 0 0 12px var(--color-receive);
+    animation: receivePulse 0.5s ease-in-out infinite;
+}
+
+@keyframes blink {
+
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.4;
+    }
+}
+
+@keyframes transmitPulse {
+
+    0%,
+    100% {
+        transform: scale(1);
+        box-shadow: 0 0 8px var(--color-transmit);
+    }
+
+    50% {
+        transform: scale(1.2);
+        box-shadow: 0 0 16px var(--color-transmit);
+    }
+}
+
+@keyframes receivePulse {
+
+    0%,
+    100% {
+        box-shadow: 0 0 8px var(--color-receive);
+    }
+
+    50% {
+        box-shadow: 0 0 16px var(--color-receive);
+    }
+}
+
+/* Label */
+.label {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--color-text-primary);
+}
+
+/* Description */
+.description {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}

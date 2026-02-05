@@ -1,0 +1,113 @@
+/* === APP LAYOUT === */
+
+.app {
+    display: flex;
+    flex-direction: column;
+    min-height: 100%;
+    width: 100%;
+    max-width: 500px;
+    margin: 0 auto;
+    position: relative;
+}
+
+/* Header */
+.header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-md);
+    gap: var(--space-md);
+    z-index: 10;
+}
+
+/* Context button */
+.contextButton {
+    display: flex;
+    align-items: center;
+    gap: var(--space-sm);
+    padding: var(--space-sm) var(--space-md);
+    background: var(--color-bg-secondary);
+    border-radius: var(--radius-md);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    color: var(--color-text-secondary);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast),
+        border-color var(--transition-fast);
+    position: relative;
+}
+
+.contextButton:hover {
+    background: var(--color-bg-elevated);
+    color: var(--color-accent);
+    border-color: var(--color-accent);
+}
+
+/* Dot indicator quando tem contexto */
+.contextDot {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 6px;
+    height: 6px;
+    background: var(--color-accent);
+    border-radius: 50%;
+}
+
+/* Main content area */
+.main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    padding: 0 var(--space-md);
+    overflow: hidden;
+}
+
+/* Footer with PTT button */
+.footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--space-xl) var(--space-md) var(--space-lg);
+    gap: var(--space-md);
+
+    /* Gradient overlay para separação visual */
+    background: linear-gradient(to top,
+            var(--color-bg-primary) 0%,
+            var(--color-bg-primary) 60%,
+            transparent 100%);
+}
+
+/* Reconnect button */
+.reconnectButton {
+    padding: var(--space-sm) var(--space-lg);
+    background: transparent;
+    border: 1px solid var(--color-error);
+    border-radius: var(--radius-md);
+    color: var(--color-error);
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    transition:
+        background var(--transition-fast),
+        color var(--transition-fast);
+}
+
+.reconnectButton:hover {
+    background: var(--color-error);
+    color: var(--color-text-primary);
+}
+
+/* Copyright */
+.copyright {
+    font-family: var(--font-family-mono);
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    text-align: center;
+    opacity: 0.6;
+}
