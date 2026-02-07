@@ -1,9 +1,12 @@
-/**
- * Constantes da aplicação
- */
+import { version } from '../../package.json';
+
+// === Copyright ===
+export const COPYRIGHT_TEXT = '© 2026 Andre Grassi de Jesus';
+export const APP_NAME = 'AI Walkie-Talkie';
+export const APP_VERSION = version;
 
 // === WebSocket ===
-export const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'ws://localhost:8765';
+export const WEBSOCKET_URL = import.meta.env.VITE_WEBSOCKET_URL || 'wss://ai-voice-bridge-n0u2.onrender.com/ws';
 
 // === Áudio ===
 export const AUDIO_INPUT_SAMPLE_RATE = 16000;  // 16kHz para envio
@@ -20,7 +23,4 @@ export const RECONNECT_MULTIPLIER = 2;
 export const VIBRATION_DURATION_MS = 50;
 export const SUBTITLE_MAX_HISTORY = 10;
 
-// === Copyright ===
-export const COPYRIGHT_TEXT = '© 2026 Andre Grassi de Jesus';
-export const APP_NAME = 'AI Walkie-Talkie';
-export const APP_VERSION = '1.0.0';
+
