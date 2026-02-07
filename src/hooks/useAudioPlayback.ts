@@ -17,13 +17,12 @@ function pcmBufferToFloat32(pcmData: ArrayBuffer): Float32Array {
     return float32;
 }
 
-// Configuração do jitter buffer (para modo normal)
-const JITTER_BUFFER_SIZE = 3; // Acumula 3 chunks antes de começar (~120ms)
-const BUFFER_LOOKAHEAD = 0.05; // 50ms de lookahead adicional
-
 /**
  * Hook para reprodução de áudio PCM recebido do servidor.
- * Usa jitter buffer + scheduled playback para reprodução suave.
+ * Usa scheduled playback para reprodução suave (Direct Streaming).
+ * 
+ * Implementa lógica de "Drift Compensation" idêntica ao teste isolado
+ * para garantir que não haja gaps ou sobreposições.
  * 
  * Quando bufferAllAudio está ativo, acumula TODOS os chunks e só reproduz
  * quando flushAllBuffered() é chamado (após turn_complete).
@@ -40,31 +39,21 @@ export function useAudioPlayback() {
     const animationFrameRef = useRef<number | null>(null);
     const isPlayingRef = useRef(false);
 
-    // Jitter buffer - acumula chunks antes de reproduzir
-    const bufferRef = useRef<AudioBuffer[]>([]);
-    const isBufferingRef = useRef(true);
-
-    // Buffer completo para modo bufferAllAudio
-    const fullBufferRef = useRef<ArrayBuffer[]>([]);
-
     // Para scheduled playback
     const nextStartTimeRef = useRef(0);
     const currentSourcesRef = useRef<AudioBufferSourceNode[]>([]);
+
+    // Buffer completo para modo bufferAllAudio (Experimental)
+    const fullBufferRef = useRef<ArrayBuffer[]>([]);
 
     /**
      * Obtém ou cria o AudioContext
      */
     const getAudioContext = useCallback(() => {
         if (!audioContextRef.current) {
-            // Primeiro, cria um AudioContext sem especificar sample rate para ver o padrão do dispositivo
-            const tempContext = new AudioContext();
-            console.log(`[AudioPlayback] Sample rate do dispositivo: ${tempContext.sampleRate}Hz`);
-            console.log(`[AudioPlayback] Sample rate esperado: ${AUDIO_OUTPUT_SAMPLE_RATE}Hz`);
-            tempContext.close();
-
-            // Agora cria o contexto com o sample rate correto
-            audioContextRef.current = new AudioContext({ sampleRate: AUDIO_OUTPUT_SAMPLE_RATE });
-            console.log(`[AudioPlayback] AudioContext criado com sample rate: ${audioContextRef.current.sampleRate}Hz`);
+            // Cria AudioContext com sample rate nativo do dispositivo
+            audioContextRef.current = new AudioContext();
+            console.log(`[AudioPlayback] AudioContext criado: ${audioContextRef.current.sampleRate}Hz`);
 
             analyserRef.current = audioContextRef.current.createAnalyser();
             analyserRef.current.fftSize = 256;
@@ -107,7 +96,25 @@ export function useAudioPlayback() {
         }
 
         const now = audioContext.currentTime;
-        const startTime = Math.max(now + BUFFER_LOOKAHEAD, nextStartTimeRef.current);
+        let startTime = nextStartTimeRef.current;
+
+        // --- DRIFT COMPENSATION (Igual ao Index.html) ---
+        // Se o próximo tempo de início já passou (atraso na rede/processamento)
+        if (startTime < now) {
+            const drift = now - startTime;
+            // Se o atraso for maior que 50ms, reseta para "agora"
+            // Isso evita que o áudio tente tocar "rápido" para alcançar o tempo perdido
+            if (drift > 0.05) {
+                console.warn(`[AudioPlayback] Drift de ${drift.toFixed(3)}s detectado. Ressincronizando.`);
+                startTime = now;
+            }
+        }
+
+        // Agenda sempre no futuro ou agora (nunca no passado)
+        // Se houver silêncio (startTime é antigo), o Math.max garante que começamos agora
+        startTime = Math.max(startTime, now);
+
+        // Atualiza o ponteiro de tempo para o fim deste buffer
         nextStartTimeRef.current = startTime + audioBuffer.duration;
 
         source.start(startTime);
@@ -119,38 +126,31 @@ export function useAudioPlayback() {
                 currentSourcesRef.current.splice(index, 1);
             }
 
-            if (currentSourcesRef.current.length === 0 && bufferRef.current.length === 0) {
-                isPlayingRef.current = false;
-                setIsPlaying(false);
-                setAudioLevel(0);
-                nextStartTimeRef.current = 0;
-                isBufferingRef.current = true;
-
-                if (animationFrameRef.current) {
-                    cancelAnimationFrame(animationFrameRef.current);
-                    animationFrameRef.current = null;
+            // Se acabaram os sources agendados
+            if (currentSourcesRef.current.length === 0) {
+                // Pequeno delay para garantir que não é apenas um gap entre packets
+                // Mas aqui simplificamos para UI update
+                if (audioContext.currentTime >= nextStartTimeRef.current) {
+                    isPlayingRef.current = false;
+                    setIsPlaying(false);
+                    setAudioLevel(0);
+                    if (animationFrameRef.current) {
+                        cancelAnimationFrame(animationFrameRef.current);
+                        animationFrameRef.current = null;
+                    }
                 }
             }
         };
-    }, []);
 
-    /**
-     * Inicia reprodução do buffer acumulado (modo jitter buffer)
-     */
-    const flushBuffer = useCallback((audioContext: AudioContext) => {
-        isBufferingRef.current = false;
-
-        while (bufferRef.current.length > 0) {
-            const buffer = bufferRef.current.shift()!;
-            scheduleBuffer(audioContext, buffer);
-        }
-
+        // Garante que a UI mostre "tocando"
         if (!isPlayingRef.current) {
             isPlayingRef.current = true;
             setIsPlaying(true);
             updateAudioLevel();
         }
-    }, [scheduleBuffer, updateAudioLevel]);
+
+    }, [updateAudioLevel]);
+
 
     /**
      * Adiciona áudio PCM à fila de reprodução.
@@ -159,135 +159,73 @@ export function useAudioPlayback() {
         // Modo bufferAllAudio: apenas acumula, não reproduz ainda
         if (options.bufferAllAudio) {
             fullBufferRef.current.push(pcmData);
-            console.log(`[AudioPlayback] Buffer acumulado: ${fullBufferRef.current.length} chunks`);
             return;
         }
 
-        // Modo normal: jitter buffer + scheduled playback
-        const audioContext = getAudioContext();
+        // --- STREAMING DIRETO ---
+        // Sem acumuladores intermediários, sem Jitter Buffer complexo.
+        // Processa e toca assim que chega.
 
+        const audioContext = getAudioContext();
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
 
+        // 1. Converte PCM (Int16) -> Float32
         const float32Data = pcmBufferToFloat32(pcmData);
 
+        // 2. Cria AudioBuffer
         const audioBuffer = audioContext.createBuffer(
             1,
             float32Data.length,
-            AUDIO_OUTPUT_SAMPLE_RATE
+            AUDIO_OUTPUT_SAMPLE_RATE // 24kHz
         );
-        audioBuffer.copyToChannel(float32Data.slice(), 0);
+        audioBuffer.copyToChannel(float32Data, 0);
 
-        if (isBufferingRef.current) {
-            bufferRef.current.push(audioBuffer);
+        // 3. Agenda imediatamente
+        scheduleBuffer(audioContext, audioBuffer);
 
-            if (bufferRef.current.length >= JITTER_BUFFER_SIZE) {
-                flushBuffer(audioContext);
-            }
-        } else {
-            scheduleBuffer(audioContext, audioBuffer);
+    }, [options.bufferAllAudio, getAudioContext, scheduleBuffer]);
 
-            if (!isPlayingRef.current) {
-                isPlayingRef.current = true;
-                setIsPlaying(true);
-                updateAudioLevel();
-            }
-        }
-    }, [options.bufferAllAudio, getAudioContext, flushBuffer, scheduleBuffer, updateAudioLevel]);
 
     /**
      * Reproduz todo o áudio acumulado (para modo bufferAllAudio).
      * Deve ser chamado quando receber turn_complete.
-     * Usa scheduled playback para evitar problemas de concatenação.
      */
     const flushAllBuffered = useCallback(() => {
-        if (fullBufferRef.current.length === 0) {
-            console.log('[AudioPlayback] Nenhum áudio para reproduzir');
-            return;
-        }
+        if (fullBufferRef.current.length === 0) return;
 
-        console.log(`[AudioPlayback] Agendando ${fullBufferRef.current.length} chunks para reprodução`);
+        console.log(`[AudioPlayback] Flush All Buffered: ${fullBufferRef.current.length} chunks`);
 
         const audioContext = getAudioContext();
+        if (audioContext.state === 'suspended') audioContext.resume();
 
-        if (audioContext.state === 'suspended') {
-            audioContext.resume();
-        }
+        // Reseta o scheduler para começar agora + 50ms (pequeno buffer inicial)
+        nextStartTimeRef.current = audioContext.currentTime + 0.05;
 
-        // Reset o nextStartTime antes de agendar
-        nextStartTimeRef.current = audioContext.currentTime + 0.05; // 50ms de buffer inicial
-
-        // Converte e agenda cada chunk em sequência
+        // Toca tudo em sequência
         const chunks = [...fullBufferRef.current];
         fullBufferRef.current = [];
 
-        let lastSource: AudioBufferSourceNode | null = null;
-
         for (const pcmData of chunks) {
             const float32Data = pcmBufferToFloat32(pcmData);
-
-            const audioBuffer = audioContext.createBuffer(
-                1,
-                float32Data.length,
-                AUDIO_OUTPUT_SAMPLE_RATE
-            );
-            audioBuffer.copyToChannel(float32Data.slice(), 0);
-
-            const source = audioContext.createBufferSource();
-            source.buffer = audioBuffer;
-
-            if (analyserRef.current) {
-                source.connect(analyserRef.current);
-            } else {
-                source.connect(audioContext.destination);
-            }
-
-            const startTime = nextStartTimeRef.current;
-            nextStartTimeRef.current = startTime + audioBuffer.duration;
-
-            source.start(startTime);
-            currentSourcesRef.current.push(source);
-            lastSource = source;
+            const audioBuffer = audioContext.createBuffer(1, float32Data.length, AUDIO_OUTPUT_SAMPLE_RATE);
+            audioBuffer.copyToChannel(float32Data, 0);
+            scheduleBuffer(audioContext, audioBuffer);
         }
 
-        // Configura callback apenas no último source
-        if (lastSource) {
-            lastSource.onended = () => {
-                currentSourcesRef.current = [];
-                isPlayingRef.current = false;
-                setIsPlaying(false);
-                setAudioLevel(0);
-                nextStartTimeRef.current = 0;
-
-                if (animationFrameRef.current) {
-                    cancelAnimationFrame(animationFrameRef.current);
-                    animationFrameRef.current = null;
-                }
-            };
-        }
-
-        isPlayingRef.current = true;
-        setIsPlaying(true);
-        updateAudioLevel();
-    }, [getAudioContext, updateAudioLevel]);
+    }, [getAudioContext, scheduleBuffer]);
 
     /**
      * Para toda reprodução
      */
     const stop = useCallback(() => {
         for (const source of currentSourcesRef.current) {
-            try {
-                source.stop();
-            } catch {
-                // Ignora erros
-            }
+            try { source.stop(); } catch { }
         }
         currentSourcesRef.current = [];
-        bufferRef.current = [];
         fullBufferRef.current = [];
         nextStartTimeRef.current = 0;
-        isBufferingRef.current = true;
 
         isPlayingRef.current = false;
         setIsPlaying(false);
@@ -311,11 +249,15 @@ export function useAudioPlayback() {
         };
     }, [stop]);
 
+    // Stub para manter compatibilidade com interface antiga
+    const flushProcessingBuffer = useCallback(() => { }, []);
+
     return {
         isPlaying,
         audioLevel,
         queueAudio,
         flushAllBuffered,
+        flushProcessingBuffer,
         stop,
     };
 }
