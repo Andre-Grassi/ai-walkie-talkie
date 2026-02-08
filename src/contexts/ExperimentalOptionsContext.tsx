@@ -7,6 +7,8 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 export interface ExperimentalOptions {
     /** Armazena todos os chunks de áudio e só reproduz após turn_complete */
     bufferAllAudio: boolean;
+    /** Faz o download automático do áudio após o fim da resposta */
+    autoDownloadWav: boolean;
 }
 
 interface ExperimentalOptionsContextType {
@@ -17,6 +19,7 @@ interface ExperimentalOptionsContextType {
 
 const defaultOptions: ExperimentalOptions = {
     bufferAllAudio: false,
+    autoDownloadWav: false,
 };
 
 const ExperimentalOptionsContext = createContext<ExperimentalOptionsContextType | null>(null);

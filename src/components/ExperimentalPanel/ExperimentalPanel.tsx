@@ -84,6 +84,22 @@ export function ExperimentalPanel({ isOpen, onClose }: ExperimentalPanelProps) {
                             className={styles.toggle}
                         />
                     </label>
+
+                    {/* Auto Download WAV */}
+                    <label className={styles.option}>
+                        <div className={styles.optionInfo}>
+                            <span className={styles.optionName}>Auto Download Response (WAV)</span>
+                            <span className={styles.optionDescription}>
+                                Faz o download automático do áudio de cada resposta para o PC
+                            </span>
+                        </div>
+                        <input
+                            type="checkbox"
+                            checked={options.autoDownloadWav}
+                            onChange={() => toggleOption('autoDownloadWav')}
+                            className={styles.toggle}
+                        />
+                    </label>
                 </div>
 
                 {/* Footer */}

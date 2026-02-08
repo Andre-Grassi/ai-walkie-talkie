@@ -8,6 +8,7 @@ import type { WalkieTalkieState, ConnectionStatus } from '../types';
 import { useWebSocket } from './useWebSocket';
 import { useAudioCapture } from './useAudioCapture';
 import { useAudioPlayback } from './useAudioPlayback';
+import { useExperimentalOptions } from '../contexts/ExperimentalOptionsContext';
 import { VIBRATION_DURATION_MS, SUBTITLE_MAX_HISTORY } from '../utils/constants';
 
 interface UseWalkieTalkieReturn {
@@ -42,6 +43,9 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
     const [context, setContext] = useState('');
     const [isContextPanelOpen, setIsContextPanelOpen] = useState(false);
 
+    // Opções experimentais
+    const { options } = useExperimentalOptions();
+
     // WebSocket
     const {
         status: connectionStatus,
@@ -71,6 +75,8 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
         isPlaying,
         queueAudio,
         flushAllBuffered,
+        downloadLastTurn,
+        reset: resetAudio,
         stop: stopPlayback,
         audioLevel: audioLevelOut,
     } = useAudioPlayback();
@@ -94,6 +100,9 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
 
         vibrate();
 
+        // Reseta o histórico de áudio para o novo turno
+        resetAudio();
+
         // Para qualquer playback em andamento
         stopPlayback();
 
@@ -109,7 +118,7 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
         sendMessage({ type: 'start_talking' });
 
         setState('recording');
-    }, [connectionStatus, state, vibrate, stopPlayback, context, sendMessage, startRecording]);
+    }, [connectionStatus, state, vibrate, resetAudio, stopPlayback, context, sendMessage, startRecording]);
 
     /**
      * Para a gravação (Release)
@@ -182,6 +191,15 @@ export function useWalkieTalkie(): UseWalkieTalkieReturn {
             case 'turn_complete':
                 // Reproduz áudio acumulado (modo bufferAllAudio)
                 flushAllBuffered();
+
+                // Se o download automático estiver ativo
+                if (options.autoDownloadWav) {
+                    // Pequeno delay para garantir que o último chunk foi processado
+                    setTimeout(() => {
+                        downloadLastTurn();
+                    }, 500);
+                }
+
                 setState('idle');
                 break;
 

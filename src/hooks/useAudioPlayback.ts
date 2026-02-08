@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { AUDIO_OUTPUT_SAMPLE_RATE } from '../utils/constants';
-import { calculateAudioLevel } from '../utils/audio';
+import { calculateAudioLevel, exportToWav } from '../utils/audio';
 import { useExperimentalOptions } from '../contexts/ExperimentalOptionsContext';
 
 /**
@@ -23,9 +23,6 @@ function pcmBufferToFloat32(pcmData: ArrayBuffer): Float32Array {
  * 
  * Implementa lógica de "Drift Compensation" idêntica ao teste isolado
  * para garantir que não haja gaps ou sobreposições.
- * 
- * Quando bufferAllAudio está ativo, acumula TODOS os chunks e só reproduz
- * quando flushAllBuffered() é chamado (após turn_complete).
  */
 export function useAudioPlayback() {
     const [isPlaying, setIsPlaying] = useState(false);
@@ -46,12 +43,14 @@ export function useAudioPlayback() {
     // Buffer completo para modo bufferAllAudio (Experimental)
     const fullBufferRef = useRef<ArrayBuffer[]>([]);
 
+    // Histórico do último turno (para download/debug)
+    const historyBufferRef = useRef<ArrayBuffer[]>([]);
+
     /**
      * Obtém ou cria o AudioContext
      */
     const getAudioContext = useCallback(() => {
         if (!audioContextRef.current) {
-            // Cria AudioContext com sample rate nativo do dispositivo
             audioContextRef.current = new AudioContext();
             console.log(`[AudioPlayback] AudioContext criado: ${audioContextRef.current.sampleRate}Hz`);
 
@@ -98,20 +97,16 @@ export function useAudioPlayback() {
         const now = audioContext.currentTime;
         let startTime = nextStartTimeRef.current;
 
-        // --- DRIFT COMPENSATION (Igual ao Index.html) ---
-        // Se o próximo tempo de início já passou (atraso na rede/processamento)
+        // --- DRIFT COMPENSATION ---
         if (startTime < now) {
             const drift = now - startTime;
-            // Se o atraso for maior que 50ms, reseta para "agora"
-            // Isso evita que o áudio tente tocar "rápido" para alcançar o tempo perdido
-            if (drift > 0.05) {
+            if (drift > 0.05) { // 50ms de tolerância
                 console.warn(`[AudioPlayback] Drift de ${drift.toFixed(3)}s detectado. Ressincronizando.`);
                 startTime = now;
             }
         }
 
-        // Agenda sempre no futuro ou agora (nunca no passado)
-        // Se houver silêncio (startTime é antigo), o Math.max garante que começamos agora
+        // Agenda sempre no futuro ou agora
         startTime = Math.max(startTime, now);
 
         // Atualiza o ponteiro de tempo para o fim deste buffer
@@ -126,10 +121,7 @@ export function useAudioPlayback() {
                 currentSourcesRef.current.splice(index, 1);
             }
 
-            // Se acabaram os sources agendados
             if (currentSourcesRef.current.length === 0) {
-                // Pequeno delay para garantir que não é apenas um gap entre packets
-                // Mas aqui simplificamos para UI update
                 if (audioContext.currentTime >= nextStartTimeRef.current) {
                     isPlayingRef.current = false;
                     setIsPlaying(false);
@@ -142,51 +134,36 @@ export function useAudioPlayback() {
             }
         };
 
-        // Garante que a UI mostre "tocando"
         if (!isPlayingRef.current) {
             isPlayingRef.current = true;
             setIsPlaying(true);
             updateAudioLevel();
         }
-
     }, [updateAudioLevel]);
-
 
     /**
      * Adiciona áudio PCM à fila de reprodução.
      */
     const queueAudio = useCallback((pcmData: ArrayBuffer) => {
-        // Modo bufferAllAudio: apenas acumula, não reproduz ainda
+        // Guarda no histórico sempre (para download/debug)
+        historyBufferRef.current.push(pcmData);
+
         if (options.bufferAllAudio) {
             fullBufferRef.current.push(pcmData);
             return;
         }
-
-        // --- STREAMING DIRETO ---
-        // Sem acumuladores intermediários, sem Jitter Buffer complexo.
-        // Processa e toca assim que chega.
 
         const audioContext = getAudioContext();
         if (audioContext.state === 'suspended') {
             audioContext.resume();
         }
 
-        // 1. Converte PCM (Int16) -> Float32
         const float32Data = pcmBufferToFloat32(pcmData);
-
-        // 2. Cria AudioBuffer
-        const audioBuffer = audioContext.createBuffer(
-            1,
-            float32Data.length,
-            AUDIO_OUTPUT_SAMPLE_RATE // 24kHz
-        );
+        const audioBuffer = audioContext.createBuffer(1, float32Data.length, AUDIO_OUTPUT_SAMPLE_RATE);
         audioBuffer.copyToChannel(float32Data, 0);
 
-        // 3. Agenda imediatamente
         scheduleBuffer(audioContext, audioBuffer);
-
     }, [options.bufferAllAudio, getAudioContext, scheduleBuffer]);
-
 
     /**
      * Reproduz todo o áudio acumulado (para modo bufferAllAudio).
@@ -200,10 +177,8 @@ export function useAudioPlayback() {
         const audioContext = getAudioContext();
         if (audioContext.state === 'suspended') audioContext.resume();
 
-        // Reseta o scheduler para começar agora + 50ms (pequeno buffer inicial)
         nextStartTimeRef.current = audioContext.currentTime + 0.05;
 
-        // Toca tudo em sequência
         const chunks = [...fullBufferRef.current];
         fullBufferRef.current = [];
 
@@ -213,8 +188,38 @@ export function useAudioPlayback() {
             audioBuffer.copyToChannel(float32Data, 0);
             scheduleBuffer(audioContext, audioBuffer);
         }
-
     }, [getAudioContext, scheduleBuffer]);
+
+    /**
+     * Reseta o estado de agendamento e histórico (chamado no início de cada turno)
+     */
+    const reset = useCallback(() => {
+        console.log('[AudioPlayback] Resetting scheduler and history');
+        nextStartTimeRef.current = 0;
+        historyBufferRef.current = [];
+        fullBufferRef.current = [];
+    }, []);
+
+    /**
+     * Faz o download do áudio capturado no último turno como arquivo WAV
+     */
+    const downloadLastTurn = useCallback(() => {
+        if (historyBufferRef.current.length === 0) {
+            console.warn('[AudioPlayback] Nenhum áudio no histórico para download');
+            return;
+        }
+
+        console.log(`[AudioPlayback] Exportando ${historyBufferRef.current.length} chunks para WAV`);
+        const blob = exportToWav(historyBufferRef.current, AUDIO_OUTPUT_SAMPLE_RATE);
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ai_response_${new Date().getTime()}.wav`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }, []);
 
     /**
      * Para toda reprodução
@@ -238,7 +243,7 @@ export function useAudioPlayback() {
     }, []);
 
     /**
-     * Cleanup ao desmontar
+     * Cleanup
      */
     useEffect(() => {
         return () => {
@@ -249,15 +254,13 @@ export function useAudioPlayback() {
         };
     }, [stop]);
 
-    // Stub para manter compatibilidade com interface antiga
-    const flushProcessingBuffer = useCallback(() => { }, []);
-
     return {
         isPlaying,
         audioLevel,
         queueAudio,
         flushAllBuffered,
-        flushProcessingBuffer,
+        downloadLastTurn,
+        reset,
         stop,
     };
 }
