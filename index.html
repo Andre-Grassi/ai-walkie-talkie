@@ -1,99 +1,306 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Walkie Talkie</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#0d1210">
+    <title>AI Walkie Talkie (Standalone Lite)</title>
+    <!-- 
+        ESTA É UMA VERSÃO STANDALONE / LITE DO PROJETO.
+        Sem dependências de framework (React/Vite). 
+        Útil para diagnósticos rápidos e dispositivos de baixo recurso.
+    -->
     <style>
+        /* === VARIABLES === */
+        :root {
+            /* Background - Dark Military Green/Black */
+            --color-bg-primary: #0d1210;
+            --color-bg-secondary: #1a2420;
+            --color-bg-elevated: #243028;
+
+            /* Accent - Military Olive/Tactical Green */
+            --color-accent: #7cb342;
+            --color-accent-hover: #8bc34a;
+
+            /* Status Colors */
+            --color-error: #ef5350;
+            --color-transmit: #ff7043;
+            --color-receive: #42a5f5;
+            --color-text-primary: #e8f5e9;
+            --color-text-secondary: #a5d6a7;
+            --color-text-muted: #4a635a;
+
+            /* Typography */
+            --font-family-mono: 'JetBrains Mono', 'Fira Code', monospace;
+            --font-family-body: 'Inter', system-ui, sans-serif;
+
+            /* Spacing & Borders */
+            --space-md: 1rem;
+            --space-lg: 1.5rem;
+            --radius-md: 8px;
+            --ptt-button-size: 140px;
+
+            /* Shadows */
+            --shadow-button: 0 4px 0 #1a2420, 0 6px 12px rgba(0, 0, 0, 0.4);
+            --shadow-button-pressed: 0 1px 0 #1a2420, 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+
+        /* === RESET & GLOBAL === */
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
         body {
-            font-family: monospace;
-            background: #111;
-            color: #0f0;
-            padding: 20px;
+            font-family: var(--font-family-body);
+            background-color: var(--color-bg-primary);
+            color: var(--color-text-primary);
+            height: 100vh;
+            overflow: hidden;
+            /* Noise Texture */
+            background-image: radial-gradient(ellipse at center, transparent 0%, var(--color-bg-primary) 70%),
+                url("data:image/svg+xml,%3Csvg viewBox='0 0 400 400' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+            background-blend-mode: overlay;
         }
 
-        button {
-            padding: 10px 20px;
-            font-size: 16px;
-            cursor: pointer;
-            background: #333;
-            color: #fff;
-            border: 1px solid #555;
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 500px;
+            margin: 0 auto;
+            position: relative;
         }
 
-        button:hover {
-            background: #444;
+        /* === HEADER === */
+        .header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: var(--space-md);
         }
 
-        #log {
-            margin-top: 20px;
-            border: 1px solid #333;
-            padding: 10px;
-            height: 300px;
+        .status-badge {
+            font-family: var(--font-family-mono);
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: var(--color-text-muted);
+            transition: all 0.3s ease;
+        }
+
+        .status-badge.connected {
+            color: var(--color-accent);
+            border-color: var(--color-accent);
+            background: rgba(124, 179, 66, 0.1);
+        }
+
+        .status-badge.disconnected {
+            color: var(--color-error);
+            border-color: var(--color-error);
+            background: rgba(239, 83, 80, 0.1);
+        }
+
+        /* === MAIN DISPLAY === */
+        .main-display {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: var(--space-md);
             overflow-y: auto;
-            background: #000;
+            font-family: var(--font-family-mono);
+            font-size: 0.85rem;
+            gap: 8px;
         }
 
-        .status {
-            margin-bottom: 20px;
+        .log-entry {
+            padding: 8px;
+            border-left: 2px solid var(--color-bg-elevated);
+            background: rgba(255, 255, 255, 0.02);
+            color: var(--color-text-secondary);
+        }
+
+        .log-entry.rx {
+            border-color: var(--color-receive);
+            color: var(--color-text-primary);
+        }
+
+        .log-entry.tx {
+            border-color: var(--color-transmit);
+        }
+
+        /* === CONTROLS AREA === */
+        .controls-area {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding-bottom: 3rem;
+            flex-grow: 1;
+            /* Pushes to center vertically */
+        }
+
+        /* === PTT BUTTON === */
+        .ptt-container {
+            position: relative;
+            width: var(--ptt-button-size);
+            height: var(--ptt-button-size);
+            margin: 20px 0;
+        }
+
+        .ptt-button {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: linear-gradient(145deg, var(--color-bg-elevated), var(--color-bg-secondary));
+            border: 3px solid var(--color-bg-elevated);
+            box-shadow: var(--shadow-button);
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: var(--color-text-secondary);
+            font-family: var(--font-family-mono);
+            font-size: 0.75rem;
+            font-weight: bold;
+            letter-spacing: 0.1em;
+            text-transform: uppercase;
+            transition: all 0.15s ease;
+            outline: none;
+            user-select: none;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        .ptt-button:active {
+            transform: translateY(3px);
+            box-shadow: var(--shadow-button-pressed);
+        }
+
+        .ptt-button.recording {
+            background: linear-gradient(145deg, var(--color-transmit), #cc5a36);
+            color: white;
+            border-color: var(--color-transmit);
+            box-shadow: var(--shadow-button-pressed), 0 0 30px rgba(255, 112, 67, 0.4);
+            transform: translateY(3px);
+        }
+
+        .ptt-button.disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .icon {
+            width: 32px;
+            height: 32px;
+            margin-bottom: 8px;
+            fill: currentColor;
+        }
+
+        /* === FOOTER ACTION === */
+        .action-bar {
+            padding: var(--space-md);
+            text-align: center;
+            margin-bottom: var(--space-lg);
+        }
+
+        .btn-restart {
+            background: transparent;
+            border: 1px solid var(--color-text-muted);
+            color: var(--color-text-muted);
+            padding: 8px 16px;
+            border-radius: 4px;
+            font-family: var(--font-family-mono);
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-transform: uppercase;
+        }
+
+        .btn-restart:hover {
+            color: var(--color-text-primary);
+            border-color: var(--color-text-primary);
         }
     </style>
 </head>
 
 <body>
-    <h1>AI Walkie Talkie</h1>
-    <div class="status">Status: <span id="status">Disconnected</span></div>
+    <div id="app">
+        <header class="header">
+            <div style="font-weight: bold; letter-spacing: -0.02em;">AI WALKIE-TALKIE <span
+                    style="font-size: 0.7em; opacity: 0.5;">LITE</span></div>
+            <div id="status" class="status-badge disconnected">Disconnected</div>
+        </header>
 
-    <div class="controls">
-        <button id="btnConnect">Connect WebSocket</button>
-        <button id="btnStart" disabled>Start Talking</button>
-        <button id="btnStop" disabled>Stop Talking</button>
+        <div id="log" class="main-display">
+            <!-- Logs go here -->
+            <div class="log-entry">System Ready. Press Connect to start.</div>
+        </div>
+
+        <div class="controls-area">
+            <div class="ptt-container">
+                <button id="btnPTT" class="ptt-button disabled">
+                    <svg class="icon" viewBox="0 0 24 24">
+                        <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z" />
+                        <path
+                            d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                    </svg>
+                    <span>HOLD</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="action-bar">
+            <button id="btnConnect" class="btn-restart">Connect System</button>
+        </div>
     </div>
-
-    <div id="log"></div>
 
     <script>
         const WS_URL = 'https://ai-voice-bridge-n0u2.onrender.com/ws';
-        const SAMPLE_RATE = 24000; // Gemini output rate
+        const SAMPLE_RATE = 24000;
+        const INPUT_SAMPLE_RATE = 16000;
 
         let ws;
         let audioCtx;
         let micStream;
         let scriptNode;
+        let activeStream; // Reference to close tracks
         let nextStartTime = 0;
+        let isHolding = false;
 
-        const INPUT_SAMPLE_RATE = 16000; // Gemini input rate
+        // UI Elements
+        const elStatus = document.getElementById('status');
+        const elLog = document.getElementById('log');
+        const btnPTT = document.getElementById('btnPTT');
+        const btnConnect = document.getElementById('btnConnect');
 
-        const log = (msg) => {
-            const el = document.getElementById('log');
+        const log = (msg, type = 'info') => {
             const div = document.createElement('div');
-            div.textContent = `${new Date().toISOString().split('T')[1].slice(0, -1)}: ${msg}`;
-            el.appendChild(div);
-            el.scrollTop = el.scrollHeight;
+            div.className = `log-entry ${type}`;
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            elLog.appendChild(div);
+            elLog.scrollTop = elLog.scrollHeight;
             console.log(msg);
         };
 
         const initAudio = () => {
             if (!audioCtx) {
-                // Use default sample rate for playback contexts (usually 44.1k or 48k)
                 audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-                log(`AudioContext created. Rate: ${audioCtx.sampleRate}, State: ${audioCtx.state}`);
             }
-            if (audioCtx.state === 'suspended') {
-                audioCtx.resume();
-            }
+            if (audioCtx.state === 'suspended') audioCtx.resume();
         };
 
         const playChunk = (arrayBuffer) => {
             if (!audioCtx) initAudio();
-
-            // Convert Int16Array (backend) to Float32 (WebAudio)
             const int16 = new Int16Array(arrayBuffer);
             const float32 = new Float32Array(int16.length);
-            for (let i = 0; i < int16.length; i++) {
-                float32[i] = int16[i] / 32768.0;
-            }
+            for (let i = 0; i < int16.length; i++) float32[i] = int16[i] / 32768.0;
 
             const buffer = audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
             buffer.getChannelData(0).set(float32);
@@ -102,42 +309,22 @@
             source.buffer = buffer;
             source.connect(audioCtx.destination);
 
-            // Scheduling logic
             const now = audioCtx.currentTime;
-
-            // If next start time is in the past (drift), reset to now
-            if (nextStartTime < now) {
-                const diff = now - nextStartTime;
-                if (diff > 0.05) { // 50ms tolerance
-                    log(`Drift detected: ${diff.toFixed(3)}s. Resyncing.`);
-                    nextStartTime = now;
-                }
-            }
-            // Simple logic: schedule at end of previous, or now if silence
-            nextStartTime = Math.max(nextStartTime, now);
-
-            // Schedule play
+            if (nextStartTime < now) nextStartTime = now;
             source.start(nextStartTime);
-
-            // Log chunk info
-            log(`Playing chunk: ${(float32.length / SAMPLE_RATE * 1000).toFixed(1)}ms at ${nextStartTime.toFixed(3)}s`);
-
-            // Advance next start time
             nextStartTime += buffer.duration;
         };
 
+        // Microphone Logic
         const downsampleBuffer = (buffer, inputRate, outputRate) => {
-            if (outputRate === inputRate) {
-                return buffer;
-            }
-            const sampleRateRatio = inputRate / outputRate;
-            const newLength = Math.round(buffer.length / sampleRateRatio);
+            if (outputRate === inputRate) return buffer;
+            const ratio = inputRate / outputRate;
+            const newLength = Math.round(buffer.length / ratio);
             const result = new Float32Array(newLength);
             let offsetResult = 0;
             let offsetBuffer = 0;
             while (offsetResult < result.length) {
-                const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
-                // Linear interpolation
+                const nextOffsetBuffer = Math.round((offsetResult + 1) * ratio);
                 let accum = 0, count = 0;
                 for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
                     accum += buffer[i];
@@ -153,10 +340,7 @@
         const convertFloat32ToInt16 = (buffer) => {
             let l = buffer.length;
             const buf = new Int16Array(l);
-            while (l--) {
-                // Clamp to [-1, 1] then scale to Int16
-                buf[l] = Math.min(1, Math.max(-1, buffer[l])) * 0x7FFF;
-            }
+            while (l--) buf[l] = Math.min(1, Math.max(-1, buffer[l])) * 0x7FFF;
             return buf.buffer;
         };
 
@@ -164,38 +348,40 @@
             try {
                 initAudio();
                 const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                micStream = audioCtx.createMediaStreamSource(stream);
 
-                // Buffer size 4096 is a good balance for latency/performance in ScriptProcessor
-                // (AudioWorklet is better but requires external file)
+                // RACE CONDITION FIX: Check if button was released while awaiting permission
+                if (!isHolding) {
+                    log('Abort: Button released before mic ready', 'warning');
+                    stream.getTracks().forEach(t => t.stop());
+                    return;
+                }
+
+                activeStream = stream;
+                micStream = audioCtx.createMediaStreamSource(stream);
                 scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
 
-                scriptNode.onaudioprocess = (audioProcessingEvent) => {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                scriptNode.onaudioprocess = (e) => {
+                    // Safety check inside processing loop
+                    if (!ws || ws.readyState !== WebSocket.OPEN || !isHolding) return;
 
-                    const inputBuffer = audioProcessingEvent.inputBuffer;
-                    const inputData = inputBuffer.getChannelData(0);
-
-                    // Downsample to 16kHz
-                    const downsampled = downsampleBuffer(inputData, audioCtx.sampleRate, INPUT_SAMPLE_RATE);
-
-                    // Convert to Int16
-                    const pcmData = convertFloat32ToInt16(downsampled);
-
-                    // Send
-                    ws.send(pcmData);
+                    const input = e.inputBuffer.getChannelData(0);
+                    const downsampled = downsampleBuffer(input, audioCtx.sampleRate, INPUT_SAMPLE_RATE);
+                    ws.send(convertFloat32ToInt16(downsampled));
                 };
 
                 micStream.connect(scriptNode);
-                scriptNode.connect(audioCtx.destination); // Needed for Chrome to activate scriptNode
+                scriptNode.connect(audioCtx.destination);
 
-                log("Microphone started");
+                btnPTT.classList.add('recording');
+                btnPTT.querySelector('span').textContent = "TALKING...";
             } catch (err) {
-                log(`Mic Error: ${err.message}`);
+                log(`Mic Error: ${err.message}`, 'error');
+                isHolding = false; // Reset state on error
             }
         };
 
         const stopRecording = () => {
+            // Clean up Audio Nodes
             if (scriptNode) {
                 scriptNode.disconnect();
                 scriptNode.onaudioprocess = null;
@@ -205,20 +391,37 @@
                 micStream.disconnect();
                 micStream = null;
             }
-            log("Microphone stopped");
+            // Create up Media Stream Tracks (Release Mic)
+            if (activeStream) {
+                activeStream.getTracks().forEach(t => t.stop());
+                activeStream = null;
+            }
+
+            btnPTT.classList.remove('recording');
+            btnPTT.querySelector('span').textContent = "HOLD";
         };
 
-        document.getElementById('btnConnect').onclick = () => {
+        const connect = () => {
+            if (ws && ws.readyState !== 3) {
+                log('Closing existing connection...');
+                ws.close();
+            }
+
+            btnConnect.textContent = "Connecting...";
+            btnConnect.disabled = true;
+
             initAudio();
             ws = new WebSocket(WS_URL);
             ws.binaryType = 'arraybuffer';
 
             ws.onopen = () => {
-                log('WebSocket Connected');
-                document.getElementById('status').textContent = 'Connected';
-                document.getElementById('status').style.color = '#0f0';
-                document.getElementById('btnStart').disabled = false;
-                document.getElementById('btnConnect').disabled = true;
+                log('Connected to Server');
+                elStatus.textContent = 'CONNECTED';
+                elStatus.className = 'status-badge connected';
+                btnPTT.classList.remove('disabled');
+                btnConnect.style.display = 'none';
+                btnConnect.disabled = false;
+                btnConnect.textContent = "Connect System";
             };
 
             ws.onmessage = (event) => {
@@ -227,43 +430,55 @@
                 } else {
                     try {
                         const msg = JSON.parse(event.data);
-                        log(`RX: ${msg.type}`);
-                    } catch (e) {
-                        log(`RX Text: ${event.data}`);
-                    }
+                        if (msg.type === 'subtitle') log(`AI: ${msg.text}`, 'rx');
+                    } catch (e) { }
                 }
             };
 
             ws.onclose = () => {
-                log('WebSocket Disconnected');
-                document.getElementById('status').textContent = 'Disconnected';
-                document.getElementById('status').style.color = 'red';
-                document.getElementById('btnStart').disabled = true;
-                document.getElementById('btnStop').disabled = true;
-                document.getElementById('btnConnect').disabled = false;
-            };
+                log('Disconnected');
+                elStatus.textContent = 'DISCONNECTED';
+                elStatus.className = 'status-badge disconnected';
+                btnPTT.classList.add('disabled');
 
-            ws.onerror = (e) => log('WebSocket Error');
+                btnConnect.style.display = 'inline-block';
+                btnConnect.textContent = "Reconnect";
+                btnConnect.disabled = false;
+
+                // Safety cleanup
+                isHolding = false;
+                stopRecording();
+            };
         };
 
-        document.getElementById('btnStart').onclick = () => {
-            if (!ws) return;
+        // Event Listeners
+        btnConnect.onclick = connect;
+
+        // PTT Logic (Mouse & Touch)
+        const startTalk = (e) => {
+            e.preventDefault(); // Prevent duplicate mouse events on touch devices
+            if (!ws || ws.readyState !== 1 || isHolding) return;
+
+            isHolding = true;
             ws.send(JSON.stringify({ type: "start_talking" }));
-            log("Sent: start_talking");
-            document.getElementById('btnStart').disabled = true;
-            document.getElementById('btnStop').disabled = false;
-            nextStartTime = audioCtx.currentTime; // Reset scheduling on new turn
             startRecording();
         };
 
-        document.getElementById('btnStop').onclick = () => {
-            if (!ws) return;
+        const stopTalk = (e) => {
+            e.preventDefault();
+            if (!isHolding) return;
+
+            isHolding = false;
             stopRecording();
             ws.send(JSON.stringify({ type: "stop_talking" }));
-            log("Sent: stop_talking");
-            document.getElementById('btnStart').disabled = false;
-            document.getElementById('btnStop').disabled = true;
         };
+
+        btnPTT.addEventListener('mousedown', startTalk);
+        btnPTT.addEventListener('mouseup', stopTalk);
+        btnPTT.addEventListener('mouseleave', stopTalk);
+
+        btnPTT.addEventListener('touchstart', startTalk, { passive: false });
+        btnPTT.addEventListener('touchend', stopTalk, { passive: false });
     </script>
 </body>
 
