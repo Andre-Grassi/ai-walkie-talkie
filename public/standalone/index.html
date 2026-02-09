@@ -453,8 +453,8 @@
                 elStatus.textContent = 'CONNECTED';
                 elStatus.className = 'status-badge connected';
                 btnPTT.classList.remove('disabled');
-                btnConnect.style.display = 'none';
-                btnConnect.disabled = false;
+                btnConnect.style.visibility = 'hidden';
+                btnConnect.disabled = true;
                 btnConnect.textContent = "Connect System";
             };
 
@@ -475,7 +475,7 @@
                 elStatus.className = 'status-badge disconnected';
                 btnPTT.classList.add('disabled');
 
-                btnConnect.style.display = 'inline-block';
+                btnConnect.style.visibility = 'visible';
                 btnConnect.textContent = "Reconnect";
                 btnConnect.disabled = false;
 
