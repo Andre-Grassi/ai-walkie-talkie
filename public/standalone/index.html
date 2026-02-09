@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Walkie Talkie</title>
+    <!-- 
+        ESTA É UMA VERSÃO STANDALONE / LITE DO PROJETO.
+        Sem dependências de framework (React/Vite). 
+        Útil para diagnósticos rápidos e dispositivos de baixo recurso.
+    -->
+    <style>
+        body {
+            font-family: monospace;
+            background: #111;
+            color: #0f0;
+            padding: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #333;
+            color: #fff;
+            border: 1px solid #555;
+        }
+
+        button:hover {
+            background: #444;
+        }
+
+        #log {
+            margin-top: 20px;
+            border: 1px solid #333;
+            padding: 10px;
+            height: 300px;
+            overflow-y: auto;
+            background: #000;
+        }
+
+        .status {
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>AI Walkie Talkie</h1>
+    <div class="status">Status: <span id="status">Disconnected</span></div>
+
+    <div class="controls">
+        <button id="btnConnect">Connect WebSocket</button>
+        <button id="btnStart" disabled>Start Talking</button>
+        <button id="btnStop" disabled>Stop Talking</button>
+    </div>
+
+    <div id="log"></div>
+
+    <script>
+        const WS_URL = 'https://ai-voice-bridge-n0u2.onrender.com/ws';
+        const SAMPLE_RATE = 24000; // Gemini output rate
+
+        let ws;
+        let audioCtx;
+        let micStream;
+        let scriptNode;
+        let nextStartTime = 0;
+
+        const INPUT_SAMPLE_RATE = 16000; // Gemini input rate
+
+        const log = (msg) => {
+            const el = document.getElementById('log');
+            const div = document.createElement('div');
+            div.textContent = `${new Date().toISOString().split('T')[1].slice(0, -1)}: ${msg}`;
+            el.appendChild(div);
+            el.scrollTop = el.scrollHeight;
+            console.log(msg);
+        };
+
+        const initAudio = () => {
+            if (!audioCtx) {
+                // Use default sample rate for playback contexts (usually 44.1k or 48k)
+                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                log(`AudioContext created. Rate: ${audioCtx.sampleRate}, State: ${audioCtx.state}`);
+            }
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+        };
+
+        const playChunk = (arrayBuffer) => {
+            if (!audioCtx) initAudio();
+
+            // Convert Int16Array (backend) to Float32 (WebAudio)
+            const int16 = new Int16Array(arrayBuffer);
+            const float32 = new Float32Array(int16.length);
+            for (let i = 0; i < int16.length; i++) {
+                float32[i] = int16[i] / 32768.0;
+            }
+
+            const buffer = audioCtx.createBuffer(1, float32.length, SAMPLE_RATE);
+            buffer.getChannelData(0).set(float32);
+
+            const source = audioCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(audioCtx.destination);
+
+            // Scheduling logic
+            const now = audioCtx.currentTime;
+
+            // If next start time is in the past (drift), reset to now
+            if (nextStartTime < now) {
+                const diff = now - nextStartTime;
+                if (diff > 0.05) { // 50ms tolerance
+                    log(`Drift detected: ${diff.toFixed(3)}s. Resyncing.`);
+                    nextStartTime = now;
+                }
+            }
+            // Simple logic: schedule at end of previous, or now if silence
+            nextStartTime = Math.max(nextStartTime, now);
+
+            // Schedule play
+            source.start(nextStartTime);
+
+            // Log chunk info
+            log(`Playing chunk: ${(float32.length / SAMPLE_RATE * 1000).toFixed(1)}ms at ${nextStartTime.toFixed(3)}s`);
+
+            // Advance next start time
+            nextStartTime += buffer.duration;
+        };
+
+        const downsampleBuffer = (buffer, inputRate, outputRate) => {
+            if (outputRate === inputRate) {
+                return buffer;
+            }
+            const sampleRateRatio = inputRate / outputRate;
+            const newLength = Math.round(buffer.length / sampleRateRatio);
+            const result = new Float32Array(newLength);
+            let offsetResult = 0;
+            let offsetBuffer = 0;
+            while (offsetResult < result.length) {
+                const nextOffsetBuffer = Math.round((offsetResult + 1) * sampleRateRatio);
+                // Linear interpolation
+                let accum = 0, count = 0;
+                for (let i = offsetBuffer; i < nextOffsetBuffer && i < buffer.length; i++) {
+                    accum += buffer[i];
+                    count++;
+                }
+                result[offsetResult] = count > 0 ? accum / count : 0;
+                offsetResult++;
+                offsetBuffer = nextOffsetBuffer;
+            }
+            return result;
+        };
+
+        const convertFloat32ToInt16 = (buffer) => {
+            let l = buffer.length;
+            const buf = new Int16Array(l);
+            while (l--) {
+                // Clamp to [-1, 1] then scale to Int16
+                buf[l] = Math.min(1, Math.max(-1, buffer[l])) * 0x7FFF;
+            }
+            return buf.buffer;
+        };
+
+        const startRecording = async () => {
+            try {
+                initAudio();
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                micStream = audioCtx.createMediaStreamSource(stream);
+
+                // Buffer size 4096 is a good balance for latency/performance in ScriptProcessor
+                // (AudioWorklet is better but requires external file)
+                scriptNode = audioCtx.createScriptProcessor(4096, 1, 1);
+
+                scriptNode.onaudioprocess = (audioProcessingEvent) => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    const inputBuffer = audioProcessingEvent.inputBuffer;
+                    const inputData = inputBuffer.getChannelData(0);
+
+                    // Downsample to 16kHz
+                    const downsampled = downsampleBuffer(inputData, audioCtx.sampleRate, INPUT_SAMPLE_RATE);
+
+                    // Convert to Int16
+                    const pcmData = convertFloat32ToInt16(downsampled);
+
+                    // Send
+                    ws.send(pcmData);
+                };
+
+                micStream.connect(scriptNode);
+                scriptNode.connect(audioCtx.destination); // Needed for Chrome to activate scriptNode
+
+                log("Microphone started");
+            } catch (err) {
+                log(`Mic Error: ${err.message}`);
+            }
+        };
+
+        const stopRecording = () => {
+            if (scriptNode) {
+                scriptNode.disconnect();
+                scriptNode.onaudioprocess = null;
+                scriptNode = null;
+            }
+            if (micStream) {
+                micStream.disconnect();
+                micStream = null;
+            }
+            log("Microphone stopped");
+        };
+
+        document.getElementById('btnConnect').onclick = () => {
+            initAudio();
+            ws = new WebSocket(WS_URL);
+            ws.binaryType = 'arraybuffer';
+
+            ws.onopen = () => {
+                log('WebSocket Connected');
+                document.getElementById('status').textContent = 'Connected';
+                document.getElementById('status').style.color = '#0f0';
+                document.getElementById('btnStart').disabled = false;
+                document.getElementById('btnConnect').disabled = true;
+            };
+
+            ws.onmessage = (event) => {
+                if (event.data instanceof ArrayBuffer) {
+                    playChunk(event.data);
+                } else {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        log(`RX: ${msg.type}`);
+                    } catch (e) {
+                        log(`RX Text: ${event.data}`);
+                    }
+                }
+            };
+
+            ws.onclose = () => {
+                log('WebSocket Disconnected');
+                document.getElementById('status').textContent = 'Disconnected';
+                document.getElementById('status').style.color = 'red';
+                document.getElementById('btnStart').disabled = true;
+                document.getElementById('btnStop').disabled = true;
+                document.getElementById('btnConnect').disabled = false;
+            };
+
+            ws.onerror = (e) => log('WebSocket Error');
+        };
+
+        document.getElementById('btnStart').onclick = () => {
+            if (!ws) return;
+            ws.send(JSON.stringify({ type: "start_talking" }));
+            log("Sent: start_talking");
+            document.getElementById('btnStart').disabled = true;
+            document.getElementById('btnStop').disabled = false;
+            nextStartTime = audioCtx.currentTime; // Reset scheduling on new turn
+            startRecording();
+        };
+
+        document.getElementById('btnStop').onclick = () => {
+            if (!ws) return;
+            stopRecording();
+            ws.send(JSON.stringify({ type: "stop_talking" }));
+            log("Sent: stop_talking");
+            document.getElementById('btnStart').disabled = false;
+            document.getElementById('btnStop').disabled = true;
+        };
+    </script>
+</body>
+
+</html>
