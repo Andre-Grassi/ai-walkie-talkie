@@ -48,13 +48,13 @@
     <div class="controls">
         <button id="btnConnect">Connect WebSocket</button>
         <button id="btnStart" disabled>Start Talking</button>
-        <!--<button id="btnStop" disabled>Stop Talking</button>-->
+        <button id="btnStop" disabled>Stop Talking</button>
     </div>
 
     <div id="log"></div>
 
     <script>
-        const WS_URL = 'https://ai-voice-bridge-n0u2.onrender.com';
+        const WS_URL = 'https://ai-voice-bridge-n0u2.onrender.com/ws';
         const SAMPLE_RATE = 24000; // Gemini output rate
 
         let ws;
